@@ -2,8 +2,10 @@
 name = "timely-util"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+description = "Utility abstractions on top of Timely Dataflow"
+repository = "https://github.com/cdstanford/timely-util"
+readme = "README.md"
 
 [dependencies]
 abomonation = "*"
