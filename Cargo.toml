@@ -8,7 +8,7 @@ repository = "https://github.com/cdstanford/timely-util"
 readme = "README.md"
 
 [dependencies]
-abomonation = "*"
+abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
 chrono = "0.4.15"
 nix = "0.19.0"
