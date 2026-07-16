@@ -2,11 +2,19 @@
     Useful generator patterns for source data
 */
 
-use super::{Duration, Scope, Stream, SystemTime};
+use super::{Duration, Scope, Stream, SystemTime, Timestamp};
 use crate::util::time_util;
 
 use std::cmp;
+use std::rc::Rc;
+
 use timely::dataflow::operators::generic::operator::source;
+
+/*
+    Timestamp used for this file
+*/
+
+type TimeNanos = u128;
 
 /*
     Data source which produces a number of output items
@@ -24,25 +32,25 @@ use timely::dataflow::operators::generic::operator::source;
     > it. It is commonly the case that when large amounts of data are
     > produced, they are eventually reduced given the opportunity.
 */
+
 const MAX_OUTPUT: u128 = 1000;
-fn variable_rate_source<D, F, G, H>(
+fn variable_rate_source<'scope, D, F, H>(
     mut item_gen: F,
-    scope: &G,
+    scope: Scope<'scope, TimeNanos>,
     cumulative_total_fun: H,
     uptime: Duration,
-) -> Stream<G, D>
+) -> Stream<'scope, TimeNanos, Vec<D>>
 where
-    D: timely::Data + timely::ExchangeData,
+    D: timely::ExchangeData,
     F: FnMut(u128) -> D + 'static, // Input: timestamp in nanoseconds
-    G: Scope<Timestamp = u128>,
-    H: Fn(Duration) -> u128 + 'static, // Input: time sicne source start time
+    H: Fn(Duration) -> u128 + 'static, // Input: time since source start time
 {
     source(scope, "Source", |capability, info| {
         // Internal details of timely dataflow
         // 1. Acquire a re-activator for this operator.
         // 2. Wrap capability in an option so that we can release it when
         //    done by setting it to None
-        let activator = scope.activator_for(&info.address[..]);
+        let activator = scope.activator_for(info.address);
         let mut maybe_cap = Some(capability);
 
         // Initialize with current time; keep track of # vals sent
@@ -87,16 +95,15 @@ where
     Data source which produces output items at a constant rate,
     stopping after the uptime is complete
 */
-pub fn fixed_rate_source<D, F, G>(
+pub fn fixed_rate_source<'scope, D, F>(
     item_gen: F,
-    scope: &G,
+    scope: Scope<'scope, TimeNanos>,
     frequency: Duration,
     uptime: Duration,
-) -> Stream<G, D>
+) -> Stream<'scope, TimeNanos, Vec<D>>
 where
-    D: timely::Data + timely::ExchangeData,
+    D: timely::ExchangeData,
     F: FnMut(u128) -> D + 'static,
-    G: Scope<Timestamp = u128>,
 {
     variable_rate_source(
         item_gen,
@@ -110,17 +117,16 @@ where
     Data source which produces output items at a linearly increasing rate,
     stopping after the uptime is complete
 */
-pub fn linear_rate_source<D, F, G>(
+pub fn linear_rate_source<'scope, D, F>(
     item_gen: F,
-    scope: &G,
+    scope: Scope<'scope, TimeNanos>,
     frequency_init: Duration,
     acceleration: f64, // output events / microsecond^2
     uptime: Duration,
-) -> Stream<G, D>
+) -> Stream<'scope, TimeNanos, Vec<D>>
 where
-    D: timely::Data + timely::ExchangeData,
+    D: timely::ExchangeData,
     F: FnMut(u128) -> D + 'static,
-    G: Scope<Timestamp = u128>,
 {
     variable_rate_source(
         item_gen,

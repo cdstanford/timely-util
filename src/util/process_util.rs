@@ -24,7 +24,7 @@ pub fn run_as_process<Out, F: FnOnce() -> Out>(func: F) {
                 Ok(WaitStatus::Signaled(pid, signal, code)) => {
                     debug_assert!(child == pid);
                     println!(
-                        "[parent] process killed! signal {}, exit code {}",
+                        "[parent] process killed! signal {:?}, exit code {}",
                         signal, code
                     );
                 }
