@@ -32,7 +32,7 @@ where
     F: Fn(usize, &str) -> String,
 {
     let mut out_file =
-        OpenOptions::new().create(true).write(true).open(out_filepath)?;
+        OpenOptions::new().truncate(true).write(true).open(out_filepath)?;
     for_each_line_do(in_filepath, move |line_number, line| {
         writeln!(out_file, "{}", closure(line_number, line))
     })
@@ -49,10 +49,10 @@ pub fn match_line_in_file(text: &str, filepath: &str) -> Result<usize> {
             return Result::Ok(line_number);
         }
     }
-    Result::Err(io::Error::new(
-        io::ErrorKind::Other,
-        format!("text {} not found in file {}", text, filepath),
-    ))
+    Result::Err(io::Error::other(format!(
+        "text {} not found in file {}",
+        text, filepath
+    )))
 }
 
 pub fn first_line_in_file(filepath: &str) -> String {
