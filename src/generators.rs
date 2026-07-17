@@ -2,11 +2,10 @@
     Useful generator patterns for source data
 */
 
-use super::{Duration, Scope, Stream, SystemTime, Timestamp};
+use super::{Duration, Scope, Stream, SystemTime};
 use crate::util::time_util;
 
 use std::cmp;
-use std::rc::Rc;
 
 use timely::dataflow::operators::generic::operator::source;
 

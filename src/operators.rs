@@ -5,19 +5,26 @@
     want to aggregate the entire stream.
 */
 
-use super::{Pipeline, Scope, Stream, Timestamp};
+use super::{Pipeline, Stream, Timestamp};
 use crate::util::either::Either;
 
-use std::fmt::Debug;
 use std::fs::OpenOptions;
+use std::hash::Hash;
 use std::io::prelude::*;
 use timely::dataflow::operators::{
-    Accumulate, Concat, Exchange, Filter, Inspect, Map, Operator,
+    Concat, Exchange, Inspect, Operator,
+};
+use timely::dataflow::operators::vec::{
+    count::Accumulate, Filter, Map,
 };
 
 /*
-    Simple enum with two variants, used internally for some operators
+    Output port
+    TODO: have not looked into why this is needed in the latest timely
+    and if it is used correctly below, need to revisit.
 */
+
+const OUT_PORT: usize = 0;
 
 /*
     Window over the entire input stream, producing a single
@@ -33,39 +40,40 @@ use timely::dataflow::operators::{
       is called; perhaps this can be accomplished by using Option magic
       to set the state to None at the end.
 */
-pub fn window_all_parallel<D1, D2, D3, I, F, E, T, G>(
+pub fn window_all_parallel<'scope, D1, D2, D3, I, F, E, T>(
     name: &str,
-    in_stream: &Stream<G, D1>,
+    in_stream: Stream<'scope, T, Vec<D1>>,
     init: I,
     fold: F,
     emit: E,
-) -> Stream<G, D3>
+) -> Stream<'scope, T, Vec<D3>>
 where
-    D1: timely::Data + Debug, // input data
-    D2: timely::Data + Debug, // accumulator
-    D3: timely::Data + Debug, // output data
+    D1: 'static,
+    D2: 'static,
+    D3: 'static,
     I: FnOnce() -> D2 + 'static,
     F: Fn(&mut D2, &T, Vec<D1>) + 'static,
     E: Fn(&D2) -> D3 + 'static,
     T: Timestamp + Copy,
-    G: Scope<Timestamp = T>,
 {
     in_stream.unary_frontier(Pipeline, name, |capability1, _info| {
         let mut agg = init();
         let cap_time = *capability1.time();
         let mut maybe_cap = Some(capability1);
 
-        move |input, output| {
-            while let Some((capability2, data)) = input.next() {
+        move |(input, frontier), output| {
+            input.for_each(|cap2, data| {
                 let mut data_vec = Vec::new();
-                data.swap(&mut data_vec);
-                fold(&mut agg, capability2.time(), data_vec);
-                if *capability2.time() > cap_time {
-                    maybe_cap = Some(capability2.retain());
+                std::mem::swap(data, &mut data_vec);
+                fold(&mut agg, cap2.time(), data_vec);
+                if *cap2.time() > cap_time {
+                    maybe_cap = Some(cap2.retain(OUT_PORT));
                 }
-            }
+            });
+            // while let Some((capability2, data)) = input.next() {
+            // }
             // Check if entire input is done
-            if input.frontier().is_empty() {
+            if frontier.is_empty() {
                 if let Some(cap) = maybe_cap.as_ref() {
                     output.session(&cap).give(emit(&agg));
                     maybe_cap = None;
@@ -82,27 +90,26 @@ where
     This version forwards all inputs to a single worker,
     and produces only one output item (for that worker).
 */
-pub fn window_all<D1, D2, D3, I, F, E, T, G>(
+pub fn window_all<'scope, D1, D2, D3, I, F, E, T>(
     name: &str,
-    in_stream: &Stream<G, D1>,
+    in_stream: Stream<'scope, T, Vec<D1>>,
     init: I,
     fold: F,
     emit: E,
-) -> Stream<G, D3>
+) -> Stream<'scope, T, Vec<D3>>
 where
-    D1: timely::Data + Debug + timely::ExchangeData, // input data
-    D2: timely::Data + Debug,                        // accumulator
-    D3: timely::Data + Debug,                        // output data
+    D1: timely::ExchangeData + 'static, // input data
+    D2: 'static,                        // accumulator
+    D3: 'static,                        // output data
     I: FnOnce() -> D2 + 'static,
     F: Fn(&mut D2, &T, Vec<D1>) + 'static,
     E: Fn(&D2) -> D3 + 'static,
     T: Timestamp + Copy,
-    G: Scope<Timestamp = T>,
 {
     let in_stream_single = in_stream.exchange(|_x| 0);
     window_all_parallel(
         name,
-        &in_stream_single,
+        in_stream_single,
         || (init(), false),
         move |(x, nonempty), time, data| {
             fold(x, time, data);
@@ -129,20 +136,19 @@ where
     - Waits for an input stream to finish before emitting output, so will hang
       on an input stream which isn't closed even if it only ever gets 1 element.
     - Clones the input once. (This shouldn't be necessary, it's just due to some
-      difficulties with ownernship, probably because window_all isn't quite
+      difficulties with ownership, probably because window_all isn't quite
       implemented in the best way yet.)
 */
-pub fn single_op_unary<D1, D2, F, T, G>(
+pub fn single_op_unary<'scope, D1, D2, F, T>(
     name: &str,
-    in_stream: &Stream<G, D1>,
+    in_stream: Stream<'scope, T, Vec<D1>>,
     op: F,
-) -> Stream<G, D2>
+) -> Stream<'scope, T, Vec<D2>>
 where
-    D1: timely::Data + Debug + timely::ExchangeData, // input data
-    D2: timely::Data + Debug,                        // output data
+    D1: timely::ExchangeData + Clone + 'static, // input data
+    D2: 'static,                        // output data
     F: Fn(D1) -> D2 + 'static,
     T: Timestamp + Copy,
-    G: Scope<Timestamp = T>,
 {
     window_all(
         name,
@@ -162,27 +168,26 @@ where
     Binary operation on two "singleton" streams, i.e.
     streams which have only one element each.
 */
-pub fn single_op_binary<D1, D2, D3, F, T, G>(
+pub fn single_op_binary<'scope, D1, D2, D3, F, T>(
     name: &str,
-    in_stream1: &Stream<G, D1>,
-    in_stream2: &Stream<G, D2>,
+    in_stream1: Stream<'scope, T, Vec<D1>>,
+    in_stream2: Stream<'scope, T, Vec<D2>>,
     op: F,
-) -> Stream<G, D3>
+) -> Stream<'scope, T, Vec<D3>>
 where
-    D1: timely::Data + Debug + timely::ExchangeData, // input data 1
-    D2: timely::Data + Debug + timely::ExchangeData, // input data 2
-    D3: timely::Data + Debug,                        // output data
+    D1: timely::ExchangeData + Clone + 'static, // input data 1
+    D2: timely::ExchangeData + Clone + 'static, // input data 2
+    D3: 'static,                        // output data
     F: Fn(D1, D2) -> D3 + 'static,
     T: Timestamp + Copy,
-    G: Scope<Timestamp = T>,
 {
     let stream1 = in_stream1.map(Either::Left);
     let stream2 = in_stream2.map(Either::Right);
-    let stream = stream1.concat(&stream2);
+    let stream = stream1.concat(stream2);
 
     window_all(
         name,
-        &stream,
+        stream,
         || (None, None),
         |(seen1, seen2), _time, data| {
             for d in data {
@@ -211,16 +216,15 @@ where
     Returns the input stream (unchanged as output).
     Panics if file handling fails.
 */
-pub fn save_to_file<D, F, T, G>(
-    in_stream: &Stream<G, D>,
+pub fn save_to_file<'scope, D, F, T>(
+    in_stream: Stream<'scope, T, Vec<D>>,
     filename: &str,
     format: F,
-) -> Stream<G, D>
+) -> Stream<'scope, T, Vec<D>>
 where
-    D: timely::Data, // input data
+    D: timely::ExchangeData, // input data
     F: Fn(&D) -> std::string::String + 'static,
     T: Timestamp,
-    G: Scope<Timestamp = T>,
 {
     let mut file =
         OpenOptions::new().create(true).append(true).open(filename).unwrap();
@@ -233,11 +237,11 @@ where
     Sum the values in each timestamp.
     (Like count, produce a separate value for each worker)
 */
-pub trait Sum<G: Scope> {
-    fn sum(&self) -> Stream<G, usize>;
+pub trait Sum<'scope, T: Timestamp> {
+    fn sum(self) -> Stream<'scope, T, Vec<usize>>;
 }
-impl<G: Scope> Sum<G> for Stream<G, usize> {
-    fn sum(&self) -> Stream<G, usize> {
+impl<'scope, T: Timestamp + Hash> Sum<'scope, T> for Stream<'scope, T, Vec<usize>> {
+    fn sum(self) -> Stream<'scope, T, Vec<usize>> {
         self.accumulate(0, |sum, data| {
             for &x in data.iter() {
                 *sum += x;
@@ -259,18 +263,18 @@ impl<G: Scope> Sum<G> for Stream<G, usize> {
     is more unavoidable.
 */
 #[rustfmt::skip]
-pub fn join_by_timestamp<D1, D2, T, G>(
-    in_stream1: &Stream<G, D1>,
-    in_stream2: &Stream<G, D2>,
-) -> Stream<G, (D1, D2)>
+pub fn join_by_timestamp<'scope, D1, D2, T>(
+    in_stream1: Stream<'scope, T, Vec<D1>>,
+    in_stream2: Stream<'scope, T, Vec<D2>>,
+) -> Stream<'scope, T, Vec<(D1, D2)>>
 where
-    D1: timely::Data, // input data 1
-    D2: timely::Data, // input data 2
-    G: Scope<Timestamp = T>,
+    D1: timely::ExchangeData + Clone, // input data 1
+    D2: timely::ExchangeData + Clone, // input data 2
+    T: Timestamp + Hash,
 {
     let stream1 = in_stream1.map(Either::Left);
     let stream2 = in_stream2.map(Either::Right);
-    let combined = stream1.concat(&stream2);
+    let combined = stream1.concat(stream2);
 
     // Map items at each timestamp to a pair of vectors
     let collected = combined.accumulate(
