@@ -3,17 +3,13 @@
 */
 
 use super::{Duration, Scope, Stream, SystemTime};
+use super::TimeNanos;
 use crate::util::time_util;
 
 use std::cmp;
 
 use timely::dataflow::operators::generic::operator::source;
 
-/*
-    Timestamp used for this file
-*/
-
-type TimeNanos = u128;
 
 /*
     Data source which produces a number of output items

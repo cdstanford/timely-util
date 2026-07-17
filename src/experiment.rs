@@ -4,14 +4,15 @@
 
 use super::ec2;
 use super::operators::save_to_file;
-use super::perf::latency_throughput_meter;
+// use super::perf::latency_throughput_meter;
 use super::{Scope, Stream};
 use crate::util::process_util::run_as_process;
 use crate::util::string_to_static_str;
 use crate::util::time_util::current_datetime_str;
 
-use abomonation_derive::Abomonation;
 use structopt::StructOpt;
+
+use serde::{Serialize, Deserialize};
 
 use std::str::FromStr;
 
@@ -41,7 +42,7 @@ const BARRIER_START_PORT: u16 = 5000;
 /*
     Types of networks where Timely distributed experiments can be run
 */
-#[derive(Abomonation, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 enum TimelyNetworkType {
     SingleNode,
     Local,
@@ -65,7 +66,7 @@ impl FromStr for TimelyNetworkType {
     Used to run distributed experiments that can be either local
     (with a node number) or over EC2 (where node number will be derived).
 */
-#[derive(Abomonation, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TimelyNodeInfo {
     Local(u64), // node number
     EC2,
@@ -101,7 +102,7 @@ impl TimelyNodeInfo {
     Parameters to run a Timely dataflow between several
     parallel workers or nodes
 */
-#[derive(Abomonation, Copy, Clone, Debug, StructOpt)]
+#[derive(Copy, Clone, Debug, StructOpt, Serialize, Deserialize)]
 pub struct TimelyParallelism {
     // Command line -w, should be >= 1
     workers: u64,
@@ -304,18 +305,18 @@ where
 {
     /* Functionality to implement */
     fn get_name(&self) -> String;
-    fn build_dataflow<G: Scope<Timestamp = u128>>(
+    fn build_dataflow<'scope>(
         &self,
         params: P,
-        scope: &mut G,
+        scope: &mut Scope<'scope, TimeNanos>,
         worker_index: usize,
-    ) -> (Stream<G, I>, Stream<G, O>);
+    ) -> (Stream<'scope, TimeNanos, 'I>, Stream<'scope, TimeNanos, 'O>);
 
     /* Functionality provided, but mostly considered private */
     // The core dataflow to be run
-    fn run_dataflow<G: Scope<Timestamp = u128>>(
+    fn run_dataflow<'scope>(
         &self,
-        scope: &mut G,
+        scope: &mut Scope<'scope, TimeNanos>,
         params: P,
         parallelism: TimelyParallelism,
         worker_index: usize,
@@ -331,7 +332,7 @@ where
         let parallelism_csv = parallelism.to_csv();
         let params_csv = params.to_csv();
         save_to_file(
-            &latency_throughput,
+            latency_throughput,
             output_filename,
             move |(latency, throughput)| {
                 format!(

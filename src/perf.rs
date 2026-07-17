@@ -6,20 +6,18 @@
 */
 
 use super::operators::{single_op_binary, window_all, window_all_parallel};
-use super::{Scope, Stream, SystemTime};
+use super::{Stream, SystemTime, TimeNanos};
 use crate::util::time_util::nanos_timestamp;
 
 use std::cmp::max;
-use std::fmt::Debug;
 use timely::dataflow::operators::Inspect;
 
 /*
     Meter which computes latency statistics for an output stream.
 */
-pub fn latency_meter<G, D>(stream: &Stream<G, D>) -> Stream<G, f64>
+pub fn latency_meter<'scope, D>(stream: Stream<'scope, TimeNanos, Vec<D>>) -> Stream<'scope, TimeNanos, Vec<f64>>
 where
-    D: timely::Data + Debug,
-    G: Scope<Timestamp = u128>,
+    D: timely::ExchangeData,
 {
     let stream = window_all_parallel(
         "Latency Meter",
@@ -37,7 +35,7 @@ where
     );
     let stream = window_all(
         "Latency Meter Collect",
-        &stream,
+        stream,
         Vec::new,
         |latencies, _time, data| {
             for latencies_other in data {
@@ -56,10 +54,9 @@ where
 /*
     Meter which computes the total volume on a stream.
 */
-pub fn volume_meter<G, D>(stream: &Stream<G, D>) -> Stream<G, usize>
+pub fn volume_meter<'scope, D>(stream: Stream<'scope, TimeNanos, Vec<D>>) -> Stream<'scope, TimeNanos, Vec<usize>>
 where
-    D: timely::Data + Debug,
-    G: Scope<Timestamp = u128>,
+    D: timely::ExchangeData,
 {
     let stream = window_all_parallel(
         "Volume Meter",
@@ -72,7 +69,7 @@ where
     );
     let stream = window_all(
         "Volume Meter Collect",
-        &stream,
+        stream,
         || 0,
         |count, _time, data| {
             for count_other in data {
@@ -88,10 +85,9 @@ where
     Meter which computes the total completion time
     (max timestamp - starting timestamp) on a stream.
 */
-pub fn completion_meter<G, D>(stream: &Stream<G, D>) -> Stream<G, f64>
+pub fn completion_meter<'scope, D>(stream: Stream<'scope, TimeNanos, Vec<D>>) -> Stream<'scope, TimeNanos, Vec<f64>>
 where
-    D: timely::Data + Debug,
-    G: Scope<Timestamp = u128>,
+    D: timely::ExchangeData,
 {
     let start_timestamp = nanos_timestamp(SystemTime::now());
     let stream = window_all_parallel(
@@ -103,14 +99,14 @@ where
     );
     let stream = window_all(
         "Completion Meter Collect",
-        &stream,
+        stream,
         || 0,
         |max_time, _time, data| {
             for max_time_other in data {
                 *max_time = max(*max_time, max_time_other);
             }
         },
-        move |max_time| (((*max_time - start_timestamp) as f64) / 1000000.0),
+        move |max_time| ((*max_time - start_timestamp) as f64) / 1000000.0,
     );
     stream.inspect(|compl_time| {
         println!("Completion Time (ms): {:?}", compl_time)
@@ -121,21 +117,20 @@ where
     Meter which computes the throughput on a computation from an input
     stream to an output stream.
 */
-pub fn throughput_meter<D1, D2, G>(
-    in_stream: &Stream<G, D1>,
-    out_stream: &Stream<G, D2>,
-) -> Stream<G, f64>
+pub fn throughput_meter<'scope, D1, D2>(
+    in_stream: Stream<'scope, TimeNanos, Vec<D1>>,
+    out_stream: Stream<'scope, TimeNanos, Vec<D2>>,
+) -> Stream<'scope, TimeNanos, Vec<f64>>
 where
-    D1: timely::Data + Debug,
-    D2: timely::Data + Debug,
-    G: Scope<Timestamp = u128>,
+    D1: timely::ExchangeData,
+    D2: timely::ExchangeData,
 {
     let volume = volume_meter(in_stream);
     let compl_time = completion_meter(out_stream);
     let throughput = single_op_binary(
         "Throughput Meter Collect",
-        &volume,
-        &compl_time,
+        volume,
+        compl_time,
         |volume, compl_time| (volume as f64) / compl_time,
     );
     throughput.inspect(|throughput| {
@@ -146,21 +141,20 @@ where
 /*
     Meter for both latency and throughput.
 */
-pub fn latency_throughput_meter<D1, D2, G>(
-    in_stream: &Stream<G, D1>,
-    out_stream: &Stream<G, D2>,
-) -> Stream<G, (f64, f64)>
+pub fn latency_throughput_meter<'scope, D1, D2>(
+    in_stream: Stream<'scope, TimeNanos, Vec<D1>>,
+    out_stream: Stream<'scope, TimeNanos, Vec<D2>>,
+) -> Stream<'scope, TimeNanos, Vec<(f64, f64)>>
 where
-    D1: timely::Data + Debug,
-    D2: timely::Data + Debug,
-    G: Scope<Timestamp = u128>,
+    D1: timely::ExchangeData,
+    D2: timely::ExchangeData + Clone,
 {
-    let latency = latency_meter(out_stream);
+    let latency = latency_meter(out_stream.clone());
     let throughput = throughput_meter(in_stream, out_stream);
     single_op_binary(
         "Latency-Throughput Meter Collect",
-        &latency,
-        &throughput,
+        latency,
+        throughput,
         |latency, throughput| (latency, throughput),
     )
 }

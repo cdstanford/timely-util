@@ -12,12 +12,17 @@ pub use timely::progress::timestamp::Timestamp;
 // Stdlib re-exports
 pub use std::time::{Duration, SystemTime};
 
+/// Default nanosecond-based time
+/// (used for experiment, generators, and perf)
+/// TODO: should be a newtype
+type TimeNanos = u128;
+
 // Modules
 pub mod ec2;
 // pub mod experiment;
 pub mod generators;
 pub mod operators;
-// pub mod perf;
+pub mod perf;
 
 // Private modules
 mod util;
