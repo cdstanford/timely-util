@@ -15,7 +15,9 @@ use timely::dataflow::operators::Inspect;
 /*
     Meter which computes latency statistics for an output stream.
 */
-pub fn latency_meter<'scope, D>(stream: Stream<'scope, TimeNanos, Vec<D>>) -> Stream<'scope, TimeNanos, Vec<f64>>
+pub fn latency_meter<'scope, D>(
+    stream: Stream<'scope, TimeNanos, Vec<D>>,
+) -> Stream<'scope, TimeNanos, Vec<f64>>
 where
     D: timely::ExchangeData,
 {
@@ -54,7 +56,9 @@ where
 /*
     Meter which computes the total volume on a stream.
 */
-pub fn volume_meter<'scope, D>(stream: Stream<'scope, TimeNanos, Vec<D>>) -> Stream<'scope, TimeNanos, Vec<usize>>
+pub fn volume_meter<'scope, D>(
+    stream: Stream<'scope, TimeNanos, Vec<D>>,
+) -> Stream<'scope, TimeNanos, Vec<usize>>
 where
     D: timely::ExchangeData,
 {
@@ -85,7 +89,9 @@ where
     Meter which computes the total completion time
     (max timestamp - starting timestamp) on a stream.
 */
-pub fn completion_meter<'scope, D>(stream: Stream<'scope, TimeNanos, Vec<D>>) -> Stream<'scope, TimeNanos, Vec<f64>>
+pub fn completion_meter<'scope, D>(
+    stream: Stream<'scope, TimeNanos, Vec<D>>,
+) -> Stream<'scope, TimeNanos, Vec<f64>>
 where
     D: timely::ExchangeData,
 {

@@ -2,14 +2,13 @@
     Useful generator patterns for source data
 */
 
-use super::{Duration, Scope, Stream, SystemTime};
 use super::TimeNanos;
+use super::{Duration, Scope, Stream, SystemTime};
 use crate::util::time_util;
 
 use std::cmp;
 
 use timely::dataflow::operators::generic::operator::source;
-
 
 /*
     Data source which produces a number of output items

@@ -12,7 +12,7 @@ use crate::util::time_util::current_datetime_str;
 
 use structopt::StructOpt;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use std::str::FromStr;
 
@@ -279,7 +279,9 @@ impl TimelyParallelism {
     ExperimentParams should be immutable and implement the Copy trait.
     For example, set_rate returns a new object.
 */
-pub trait ExperimentParams: Copy + StructOpt + timely::ExchangeData + Send + Sync {
+pub trait ExperimentParams:
+    Copy + StructOpt + timely::ExchangeData + Send + Sync
+{
     fn to_csv(self) -> String;
     fn to_vec(self) -> Vec<String>;
     fn get_exp_duration_secs(&self) -> u64;
@@ -297,7 +299,8 @@ pub trait ExperimentParams: Copy + StructOpt + timely::ExchangeData + Send + Syn
     is necessary because Rust generics are weird -- see
     https://stackoverflow.com/questions/37606035/pass-generic-function-as-argument
 */
-pub trait LatencyThroughputExperiment<P, I, O>: timely::ExchangeData + Send + Sync
+pub trait LatencyThroughputExperiment<P, I, O>:
+    timely::ExchangeData + Send + Sync
 where
     P: ExperimentParams + timely::ExchangeData,
     I: Clone + timely::ExchangeData,

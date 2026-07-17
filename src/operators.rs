@@ -11,12 +11,8 @@ use crate::util::either::Either;
 use std::fs::OpenOptions;
 use std::hash::Hash;
 use std::io::prelude::*;
-use timely::dataflow::operators::{
-    Concat, Exchange, Inspect, Operator,
-};
-use timely::dataflow::operators::vec::{
-    count::Accumulate, Filter, Map,
-};
+use timely::dataflow::operators::vec::{count::Accumulate, Filter, Map};
+use timely::dataflow::operators::{Concat, Exchange, Inspect, Operator};
 
 /*
     Output port
@@ -146,7 +142,7 @@ pub fn single_op_unary<'scope, D1, D2, F, T>(
 ) -> Stream<'scope, T, Vec<D2>>
 where
     D1: timely::ExchangeData + Clone + 'static, // input data
-    D2: 'static,                        // output data
+    D2: 'static,                                // output data
     F: Fn(D1) -> D2 + 'static,
     T: Timestamp + Copy,
 {
@@ -177,7 +173,7 @@ pub fn single_op_binary<'scope, D1, D2, D3, F, T>(
 where
     D1: timely::ExchangeData + Clone + 'static, // input data 1
     D2: timely::ExchangeData + Clone + 'static, // input data 2
-    D3: 'static,                        // output data
+    D3: 'static,                                // output data
     F: Fn(D1, D2) -> D3 + 'static,
     T: Timestamp + Copy,
 {
@@ -240,7 +236,9 @@ where
 pub trait Sum<'scope, T: Timestamp> {
     fn sum(self) -> Stream<'scope, T, Vec<usize>>;
 }
-impl<'scope, T: Timestamp + Hash> Sum<'scope, T> for Stream<'scope, T, Vec<usize>> {
+impl<'scope, T: Timestamp + Hash> Sum<'scope, T>
+    for Stream<'scope, T, Vec<usize>>
+{
     fn sum(self) -> Stream<'scope, T, Vec<usize>> {
         self.accumulate(0, |sum, data| {
             for &x in data.iter() {
