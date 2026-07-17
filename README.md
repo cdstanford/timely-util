@@ -6,4 +6,4 @@ These are various abstractions I needed when running experiments on top of Timel
 
 ### Change log
 
-- `v0.2.0` (2026-07-16): Ported to timely 0.31.0 and Rust 2026.
+- `v0.2.0` (2026-07-16): Ported to timely 0.31.0 and Rust 2024.
