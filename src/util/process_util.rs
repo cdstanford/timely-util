@@ -2,8 +2,8 @@
     Process management
 */
 
-use nix::sys::wait::{waitpid, WaitStatus};
-use nix::unistd::{fork, ForkResult};
+use nix::sys::wait::{WaitStatus, waitpid};
+use nix::unistd::{ForkResult, fork};
 use std::process::exit;
 
 // Run a function as a separate process.

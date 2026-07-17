@@ -11,7 +11,7 @@ use crate::util::either::Either;
 use std::fs::OpenOptions;
 use std::hash::Hash;
 use std::io::prelude::*;
-use timely::dataflow::operators::vec::{count::Accumulate, Filter, Map};
+use timely::dataflow::operators::vec::{Filter, Map, count::Accumulate};
 use timely::dataflow::operators::{Concat, Exchange, Inspect, Operator};
 
 /*
@@ -69,11 +69,11 @@ where
             // while let Some((capability2, data)) = input.next() {
             // }
             // Check if entire input is done
-            if frontier.is_empty() {
-                if let Some(cap) = maybe_cap.as_ref() {
-                    output.session(&cap).give(emit(&agg));
-                    maybe_cap = None;
-                }
+            if frontier.is_empty()
+                && let Some(cap) = maybe_cap.as_ref()
+            {
+                output.session(&cap).give(emit(&agg));
+                maybe_cap = None;
             }
         }
     })
@@ -112,11 +112,7 @@ where
             *nonempty = true;
         },
         move |(x, nonempty)| {
-            if *nonempty {
-                Some(emit(x))
-            } else {
-                None
-            }
+            if *nonempty { Some(emit(x)) } else { None }
         },
     )
     .filter(|x| x.is_some())

@@ -3,7 +3,7 @@
 */
 
 use std::fs::{File, OpenOptions};
-use std::io::{self, prelude::*, BufReader, Result};
+use std::io::{self, BufReader, Result, prelude::*};
 
 /*
     File handling
