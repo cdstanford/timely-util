@@ -4,8 +4,8 @@
 
 use super::ec2;
 use super::operators::save_to_file;
-// use super::perf::latency_throughput_meter;
-use super::{Scope, Stream};
+use super::perf::latency_throughput_meter;
+use super::{Scope, Stream, TimeNanos};
 use crate::util::process_util::run_as_process;
 use crate::util::string_to_static_str;
 use crate::util::time_util::current_datetime_str;
@@ -279,7 +279,7 @@ impl TimelyParallelism {
     ExperimentParams should be immutable and implement the Copy trait.
     For example, set_rate returns a new object.
 */
-pub trait ExperimentParams: Copy + StructOpt + timely::ExchangeData {
+pub trait ExperimentParams: Copy + StructOpt + timely::ExchangeData + Send + Sync {
     fn to_csv(self) -> String;
     fn to_vec(self) -> Vec<String>;
     fn get_exp_duration_secs(&self) -> u64;
@@ -297,26 +297,26 @@ pub trait ExperimentParams: Copy + StructOpt + timely::ExchangeData {
     is necessary because Rust generics are weird -- see
     https://stackoverflow.com/questions/37606035/pass-generic-function-as-argument
 */
-pub trait LatencyThroughputExperiment<P, I, O>: timely::ExchangeData
+pub trait LatencyThroughputExperiment<P, I, O>: timely::ExchangeData + Send + Sync
 where
-    P: ExperimentParams,
-    I: std::fmt::Debug + Clone + timely::Data,
-    O: std::fmt::Debug + Clone + timely::Data,
+    P: ExperimentParams + timely::ExchangeData,
+    I: Clone + timely::ExchangeData,
+    O: Clone + timely::ExchangeData,
 {
     /* Functionality to implement */
     fn get_name(&self) -> String;
     fn build_dataflow<'scope>(
         &self,
         params: P,
-        scope: &mut Scope<'scope, TimeNanos>,
+        scope: Scope<'scope, TimeNanos>,
         worker_index: usize,
-    ) -> (Stream<'scope, TimeNanos, 'I>, Stream<'scope, TimeNanos, 'O>);
+    ) -> (Stream<'scope, TimeNanos, Vec<I>>, Stream<'scope, TimeNanos, Vec<O>>);
 
     /* Functionality provided, but mostly considered private */
     // The core dataflow to be run
     fn run_dataflow<'scope>(
         &self,
-        scope: &mut Scope<'scope, TimeNanos>,
+        scope: Scope<'scope, TimeNanos>,
         params: P,
         parallelism: TimelyParallelism,
         worker_index: usize,
@@ -328,7 +328,7 @@ where
         // completion_meter(&output);
         // latency_meter(&output);
         // throughput_meter(&input, &output);
-        let latency_throughput = latency_throughput_meter(&input, &output);
+        let latency_throughput = latency_throughput_meter(input, output);
         let parallelism_csv = parallelism.to_csv();
         let params_csv = params.to_csv();
         save_to_file(

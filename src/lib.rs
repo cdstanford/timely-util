@@ -19,7 +19,7 @@ type TimeNanos = u128;
 
 // Modules
 pub mod ec2;
-// pub mod experiment;
+pub mod experiment;
 pub mod generators;
 pub mod operators;
 pub mod perf;
